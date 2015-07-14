@@ -25,22 +25,22 @@ public class TestDisruptedReactor {
 	
 	public static void main(String[] args) throws IOException
 	{
-	    final int processors = Runtime.getRuntime().availableProcessors() - 1;
-	    final int maxNumberOfChannels = 2048;
+		final int processors = Runtime.getRuntime().availableProcessors() - 1;
+		final int maxNumberOfChannels = 2048;
 
-	    final Executor executor = Executors.newFixedThreadPool(processors);		
-	    final Disruptor<SelectionEvent>[] disruptors = DisruptedProcessors.createProcessors(executor, processors, maxNumberOfChannels);
-	    final DisruptedReactor reactor = new DisruptedReactor(DisruptedProcessors.nearestPowerOf2(maxNumberOfChannels*2));
-        
-        final ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
-        serverSocketChannel.configureBlocking(false);
-        serverSocketChannel.bind(new InetSocketAddress("127.0.0.1", 3000), 1024);
-        
-        reactor.register(serverSocketChannel, SelectionKey.OP_ACCEPT,
-        		new AcceptorHandler(reactor, serverSocketChannel, disruptors)
-        );
-        
-        
+		final Executor executor = Executors.newFixedThreadPool(processors);		
+		final Disruptor<SelectionEvent>[] disruptors = DisruptedProcessors.createProcessors(executor, processors, maxNumberOfChannels);
+		final DisruptedReactor reactor = new DisruptedReactor(DisruptedProcessors.nearestPowerOf2(maxNumberOfChannels*2));
+		
+		final ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+		serverSocketChannel.configureBlocking(false);
+		serverSocketChannel.bind(new InetSocketAddress("127.0.0.1", 3000), 1024);
+		
+		reactor.register(serverSocketChannel, SelectionKey.OP_ACCEPT,
+				new AcceptorHandler(reactor, serverSocketChannel, disruptors)
+		);
+		
+		
 	}
 	
 	static class AcceptorHandler extends DisruptedAsyncChannelEventHandler {

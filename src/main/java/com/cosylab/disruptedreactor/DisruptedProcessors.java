@@ -13,18 +13,18 @@ public final class DisruptedProcessors {
 
 	public static Disruptor<SelectionEvent>[] createProcessors(Executor executor, int processors, int maxNumberOfChannels)
 	{
-	    // multiply by 2 since 2 SelectionEvents (read and write) can get into the queue per channel
-	    final int ringSize = nearestPowerOf2((maxNumberOfChannels*2)/processors + 1);
+		// multiply by 2 since 2 SelectionEvents (read and write) can get into the queue per channel
+		final int ringSize = nearestPowerOf2((maxNumberOfChannels*2)/processors + 1);
 
-	    @SuppressWarnings("unchecked")
+		@SuppressWarnings("unchecked")
 		final Disruptor<SelectionEvent>[] disruptors = new Disruptor[processors];
-	    for (int i = 0; i < processors; i++)
-	    {
-	    	disruptors[i] = createProcessorDisruptor(ringSize, executor);
-	    	disruptors[i].start();
-	    }
+		for (int i = 0; i < processors; i++)
+		{
+			disruptors[i] = createProcessorDisruptor(ringSize, executor);
+			disruptors[i].start();
+		}
 
-	    return disruptors;
+		return disruptors;
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -32,16 +32,16 @@ public final class DisruptedProcessors {
 	{
 
 		final Disruptor<SelectionEvent> disruptor =
-        		new Disruptor<>(
-        				SelectionEvent::new,
-        				ringSize,
-        				executor,
-        				ProducerType.SINGLE,
-        				waitStrategy);
+				new Disruptor<>(
+						SelectionEvent::new,
+						ringSize,
+						executor,
+						ProducerType.SINGLE,
+						waitStrategy);
 
-        disruptor.handleEventsWith(DisruptedAsyncChannelEventHandler::onSelectionEvent);
-        
-        return disruptor;
+		disruptor.handleEventsWith(DisruptedAsyncChannelEventHandler::onSelectionEvent);
+		
+		return disruptor;
 	}
 	
 	public static final int nearestPowerOf2(int v) {
