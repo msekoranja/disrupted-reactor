@@ -48,13 +48,15 @@ public abstract class DisruptedAsyncChannelEventHandler
 		ringBuffer.publish(seq);
 	}
 	
-	private static final void close(SelectionKey key) {
+	private static final void close(AsyncChannelEventHandler handler, SelectionKey key) {
 		try {
-			// no need to call "handler.getReactor().unregsiter(key);"
-			key.channel().close();
-		} catch (IOException e) {
-			// noop
+			handler.onClose(key);
+		} catch (Throwable th) {
+			// TODO
+			th.printStackTrace();
 		}
+
+		handler.getReactor().unregisterAndClose(key);
 	}
 	
 	public static final void onSelectionEvent(SelectionEvent event, long sequence, boolean endOfBatch)
@@ -73,7 +75,7 @@ public abstract class DisruptedAsyncChannelEventHandler
 			// close (on 'channel.read() < 0') without throwing an exception
 			if (ops == AsyncChannelEventHandler.CHANNEL_CLOSED)
 			{
-				close(key);
+				close(handler, key);
 				return;
 			}
 			
@@ -86,6 +88,13 @@ public abstract class DisruptedAsyncChannelEventHandler
 				ops |= handler.processWrite(key);
 			}
 			
+			// close (on 'channel.write() < 0') without throwing an exception
+			if (ops == AsyncChannelEventHandler.CHANNEL_CLOSED)
+			{
+				close(handler, key);
+				return;
+			}
+
 			if ((readyOps & SelectionKey.OP_ACCEPT) != 0)
 				ops |= handler.processAccept(key);
 	
@@ -96,7 +105,7 @@ public abstract class DisruptedAsyncChannelEventHandler
 		}
 		catch (IOException ex)
 		{
-			close(key);
+			close(handler, key);
 		}
 	}
 }

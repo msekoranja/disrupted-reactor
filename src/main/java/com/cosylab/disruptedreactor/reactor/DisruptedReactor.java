@@ -90,6 +90,18 @@ public final class DisruptedReactor implements AutoCloseable
 		selector.wakeup();
 	}
 	
+	// note: onClose() not called by this method
+	public void unregisterAndClose(SelectionKey key)
+	{
+		final long seq = ringBuffer.next();
+		final ReactorRequest event = ringBuffer.get(seq);
+		event.type = RequestType.CLOSE;
+		event.key = key;
+		ringBuffer.publish(seq);
+		
+		selector.wakeup();
+	}
+
 	private void handleRequest(ReactorRequest event)
 	{
 		System.out.println("onEvent: " + event.type);
@@ -105,6 +117,10 @@ public final class DisruptedReactor implements AutoCloseable
 				break;
 			case UNREGISTER:
 				event.key.cancel();
+				break;
+			case CLOSE:
+				// implicit close of a SelectionKey
+				event.key.channel().close();
 				break;
 			}
 		} catch (Throwable th) {
@@ -144,7 +160,7 @@ public final class DisruptedReactor implements AutoCloseable
    
 	
 	static class ReactorRequest {
-		enum RequestType { REGISTER, UNREGISTER, INTEREST_OPS };
+		enum RequestType { REGISTER, UNREGISTER, INTEREST_OPS, CLOSE };
 		RequestType type;
 		SelectableChannel channel;
 		SelectionHandler handler;
