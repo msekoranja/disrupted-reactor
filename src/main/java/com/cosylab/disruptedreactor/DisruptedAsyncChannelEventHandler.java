@@ -3,6 +3,7 @@
  */
 package com.cosylab.disruptedreactor;
 
+import java.io.IOException;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
 
@@ -47,30 +48,55 @@ public abstract class DisruptedAsyncChannelEventHandler
 		ringBuffer.publish(seq);
 	}
 	
+	private static final void close(SelectionKey key) {
+		try {
+			// no need to call "handler.getReactor().unregsiter(key);"
+			key.channel().close();
+		} catch (IOException e) {
+			// noop
+		}
+	}
+	
 	public static final void onSelectionEvent(SelectionEvent event, long sequence, boolean endOfBatch)
 	{
 		final SelectionKey key = event.key;
 		final int readyOps = key.readyOps();
 		final AsyncChannelEventHandler handler = (AsyncChannelEventHandler)key.attachment();
 		
-		int ops = 0;
+		try
+		{
+			int ops = 0;
+			
+			if ((readyOps & SelectionKey.OP_READ) != 0)
+				ops |= handler.processRead(key);
 		
-		if ((readyOps & SelectionKey.OP_READ) != 0)
-			ops |= handler.processRead(key);
-		
-		// read operation can close
-		if (!key.isValid())
-			return;
-		
-		if ((readyOps & SelectionKey.OP_WRITE) != 0)
-			ops |= handler.processWrite(key);
-		
-		if ((readyOps & SelectionKey.OP_ACCEPT) != 0)
-			ops |= handler.processAccept(key);
-
-		if ((readyOps & SelectionKey.OP_CONNECT) != 0)
-			ops |= handler.processConnect(key);
-
-		handler.getReactor().interestOps(key, ops);
+			// close (on 'channel.read() < 0') without throwing an exception
+			if (ops == AsyncChannelEventHandler.CHANNEL_CLOSED)
+			{
+				close(key);
+				return;
+			}
+			
+			if ((readyOps & SelectionKey.OP_WRITE) != 0)
+				ops |= handler.processWrite(key);
+			// TODO configurable low latency
+			else if ((ops & SelectionKey.OP_WRITE) != 0)
+			{
+				ops ^= SelectionKey.OP_WRITE; 
+				ops |= handler.processWrite(key);
+			}
+			
+			if ((readyOps & SelectionKey.OP_ACCEPT) != 0)
+				ops |= handler.processAccept(key);
+	
+			if ((readyOps & SelectionKey.OP_CONNECT) != 0)
+				ops |= handler.processConnect(key);
+	
+			handler.getReactor().interestOps(key, ops);
+		}
+		catch (IOException ex)
+		{
+			close(key);
+		}
 	}
 }

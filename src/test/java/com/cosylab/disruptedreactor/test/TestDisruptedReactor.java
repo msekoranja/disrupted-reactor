@@ -13,6 +13,7 @@ import java.nio.channels.WritableByteChannel;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
+import com.cosylab.disruptedreactor.AsyncChannelEventHandler;
 import com.cosylab.disruptedreactor.DisruptedAsyncChannelEventHandler;
 import com.cosylab.disruptedreactor.DisruptedProcessors;
 import com.cosylab.disruptedreactor.SelectionEvent;
@@ -90,47 +91,37 @@ public class TestDisruptedReactor {
 		}
 	
 		@Override
-		public int processWrite(SelectionKey key) {
+		public int processWrite(SelectionKey key) throws IOException {
 			System.out.println("processWrite");
 			buffer.clear();
 			buffer.put("ACK\n".getBytes());
 			buffer.flip();
-			try {
-				((WritableByteChannel)channel).write(buffer);
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+			((WritableByteChannel)channel).write(buffer);
 			
 			return SelectionKey.OP_READ;
 		}
 	
 		ByteBuffer buffer = ByteBuffer.allocate(1024);
 		@Override
-		public int processRead(SelectionKey key) {
+		public int processRead(SelectionKey key) throws IOException {
 			System.out.println("processRead");
 			
 			buffer.clear();
-			try {
-				int bytesRead = ((ReadableByteChannel)channel).read(buffer);
-				if (bytesRead < 0)
-				{
-					reactor.unregsiter(key);
-					channel.close();	// needed?
-				}
-				else
-				{
-					String s = new String(buffer.array(), 0, buffer.position());
-					System.out.println(s);
-	
-					return SelectionKey.OP_READ | SelectionKey.OP_WRITE;
-				}
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+			
+			int bytesRead = ((ReadableByteChannel)channel).read(buffer);
+			if (bytesRead < 0)
+			{
+				//throw new ClosedChannelException();
+				return AsyncChannelEventHandler.CHANNEL_CLOSED;
+			}
+			else
+			{
+				String s = new String(buffer.array(), 0, buffer.position());
+				System.out.println(s);
+
+				return SelectionKey.OP_READ | SelectionKey.OP_WRITE;
 			}
 			
-			return SelectionKey.OP_READ;
 		}
 	}
 
