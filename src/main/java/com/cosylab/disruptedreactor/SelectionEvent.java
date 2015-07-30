@@ -4,4 +4,5 @@ import java.nio.channels.SelectionKey;
 
 public class SelectionEvent {
 	public SelectionKey key;
+	public int readyOps;
 }

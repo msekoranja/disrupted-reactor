@@ -53,7 +53,7 @@ public class TestDisruptedReactor {
 				DisruptedReactor reactor,
 				ServerSocketChannel channel,
 				Disruptor<SelectionEvent>[] disruptors) {
-			super(reactor, channel, disruptors[0].getRingBuffer());
+			super(reactor, channel, SelectionKey.OP_ACCEPT, disruptors[0].getRingBuffer());
 			this.disruptors = disruptors;
 		}
 	
@@ -87,7 +87,7 @@ public class TestDisruptedReactor {
 				DisruptedReactor reactor,
 				SelectableChannel channel,
 				RingBuffer<SelectionEvent> ringBuffer) {
-			super(reactor, channel, ringBuffer);
+			super(reactor, channel, SelectionKey.OP_READ, ringBuffer);
 		}
 	
 		@Override

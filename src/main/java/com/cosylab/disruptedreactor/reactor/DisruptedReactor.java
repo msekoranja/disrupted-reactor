@@ -8,6 +8,7 @@ import java.nio.channels.Selector;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.cosylab.disruptedreactor.reactor.DisruptedReactor.ReactorRequest.RequestType;
 import com.lmax.disruptor.AlertException;
@@ -20,11 +21,13 @@ import com.lmax.disruptor.dsl.ProducerType;
 
 public final class DisruptedReactor implements AutoCloseable
 {
-	final ExecutorService executor;
-	final Disruptor<ReactorRequest> disruptor;
-	final RingBuffer<ReactorRequest> ringBuffer;
+	private final ExecutorService executor;
+	private final Disruptor<ReactorRequest> disruptor;
+	private final RingBuffer<ReactorRequest> ringBuffer;
 	
-	final Selector selector;
+	private final Selector selector;
+	
+	private final AtomicBoolean closed = new AtomicBoolean();
 	
 	@SuppressWarnings("unchecked")
 	public DisruptedReactor(int ringSize) throws IOException
@@ -45,6 +48,9 @@ public final class DisruptedReactor implements AutoCloseable
 	@Override
 	public void close() throws IOException
 	{
+		if (closed.getAndSet(true))
+			return;
+		
 		selector.close();
 		
 		//disruptor.shutdown(timeout, timeUnit);
@@ -56,6 +62,8 @@ public final class DisruptedReactor implements AutoCloseable
 
 	public void register(SelectableChannel channel, int ops, SelectionHandler handler)
 	{
+		System.out.println("register(SelectableChannel channel, int ops, SelectionHandler handler): " + ops);
+	Thread.dumpStack();
 		final long seq = ringBuffer.next();
 		final ReactorRequest event = ringBuffer.get(seq);
 		event.type = RequestType.REGISTER;
@@ -80,6 +88,7 @@ public final class DisruptedReactor implements AutoCloseable
 
 	public void interestOps(SelectionKey key, int ops)
 	{
+		System.out.println("interestOps(SelectionKey key, int ops): " + ops);
 		final long seq = ringBuffer.next();
 		final ReactorRequest event = ringBuffer.get(seq);
 		event.type = RequestType.INTEREST_OPS;
@@ -90,9 +99,24 @@ public final class DisruptedReactor implements AutoCloseable
 		selector.wakeup();
 	}
 	
+	public void interestOps(SelectableChannel channel, int ops)
+	{
+		System.out.println("interestOps(SelectableChannel channel, int ops): " + ops);
+		if (ops == 5) Thread.dumpStack();
+		final long seq = ringBuffer.next();
+		final ReactorRequest event = ringBuffer.get(seq);
+		event.type = RequestType.INTEREST_OPS;
+		event.channel = channel; if (channel == null) System.out.println("channel == null !!!");
+		event.ops = ops;
+		ringBuffer.publish(seq);
+		
+		selector.wakeup();
+	}
+
 	// note: onClose() not called by this method
 	public void unregisterAndClose(SelectionKey key)
 	{
+		System.out.println("unregisterAndClose(SelectionKey key)");
 		final long seq = ringBuffer.next();
 		final ReactorRequest event = ringBuffer.get(seq);
 		event.type = RequestType.CLOSE;
@@ -102,6 +126,18 @@ public final class DisruptedReactor implements AutoCloseable
 		selector.wakeup();
 	}
 
+	public void unregisterAndClose(SelectableChannel channel)
+	{
+		System.out.println("unregisterAndClose(SelectableChannel channel)");
+		final long seq = ringBuffer.next();
+		final ReactorRequest event = ringBuffer.get(seq);
+		event.type = RequestType.CLOSE;
+		event.channel = channel;
+		ringBuffer.publish(seq);
+		
+		selector.wakeup();
+	}
+	
 	private void handleRequest(ReactorRequest event)
 	{
 		System.out.println("onEvent: " + event.type);
@@ -110,6 +146,9 @@ public final class DisruptedReactor implements AutoCloseable
 			switch (event.type)
 			{
 			case INTEREST_OPS:
+				if (event.key == null)
+					event.key = event.channel.keyFor(selector);
+if (event.key != null)
 				event.key.interestOps(event.ops);
 				break;
 			case REGISTER:
@@ -119,10 +158,15 @@ public final class DisruptedReactor implements AutoCloseable
 				event.key.cancel();
 				break;
 			case CLOSE:
+				SelectableChannel channel = event.channel;
+				if (channel == null)
+					channel = event.key.channel();
 				// implicit close of a SelectionKey
-				event.key.channel().close();
+				channel.close();
 				break;
 			}
+		} catch (NullPointerException npe) {
+			npe.printStackTrace();
 		} catch (Throwable th) {
 			// guard
 			// TODO
@@ -134,9 +178,12 @@ public final class DisruptedReactor implements AutoCloseable
 	
 	private void doSelect(boolean block)
 	{
+		if (block)		System.out.println("doSelect: " + block);
+		
 		try
 		{
 			int selectedCount = block ? selector.select() : selector.selectNow();
+if (block)			System.out.println(selectedCount);
 			if (selectedCount > 0)
 			{
 				Set<SelectionKey> selectedKeys = selector.selectedKeys();
@@ -190,6 +237,9 @@ public final class DisruptedReactor implements AutoCloseable
 			while ((availableSequence = cursorSequence.get()) < sequence)
 			{
 				barrier.checkAlert();
+				
+				if (closed.get())
+					break;
 
 				if (counter > 0)
 				{
